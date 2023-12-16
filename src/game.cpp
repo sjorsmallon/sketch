@@ -6,6 +6,12 @@
 #include <glad/glad.h> 
 #include <SDL/SDL_opengl.h>
 
+// optional fmt access. not used in any of the "core" libraries, but used by log.
+#include "log/log.hpp"
+
+
+
+//imgui
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
 #include "imgui_impl_opengl3.h"
@@ -110,13 +116,12 @@ void init(Game& game)
             ImGui_ImplOpenGL3_Init();
         }
 
-
-
     }
 
+    Log::log("hello {}!", "world");
+    Log::warn("warning the {}", "world");
+    Log::error("alex the {}???", "lion");
     // from this point, we have a window and we can load shaders. and set some renderer state.
-
-
     // step 1: load a shader!
     uint32_t pbr_shader_program_id = temp_create_pbr_shader_program();
 
@@ -134,10 +139,9 @@ void init(Game& game)
         .program_id = pbr_shader_program_id
     };
 
+
     glUseProgram(pbr_shader.program_id);
     set_uniform(pbr_shader, "projection", projection);
-
-
 }
 
 void run(Game& game)
@@ -193,10 +197,13 @@ static void GLAPIENTRY opengl_debug_message_callback(
 
     if (!warning_can_be_ignored) 
     {
-        if (type == GL_DEBUG_TYPE_ERROR) std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
+        if (type == GL_DEBUG_TYPE_ERROR) 
+        {
+            Log::error("GL CALLBACK: type = 0x{:x}, severity = 0x{:x}, message = {}\n", type, severity, message);
+        }
         else
         {
-            std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
+            Log::log("GL CALLBACK: type = 0x{:x}, severity = 0x{:x}, message = {}\n", type, severity, message);
         }
     }
 }
@@ -207,7 +214,6 @@ static void handle_input(Game& game)
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
-        std::cerr << "polling event." << '\n';
         switch (event.type)
         {
             case SDL_KEYDOWN:
@@ -235,7 +241,7 @@ static void handle_input(Game& game)
                 break;
             }
         }
-        ImGui_ImplSDL2_ProcessEvent(&event); // Forward your event to backend
+        ImGui_ImplSDL2_ProcessEvent(&event); // forward events to imgui.
     }
 }
 
