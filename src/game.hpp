@@ -18,6 +18,7 @@ struct Game {
 	int previous_frame_start_ms = 0;
 	bool frame_rate_capped = false;
 	bool is_running = true;
+	bool debug = true;
 
 	SDL_Window* window;
   	SDL_GLContext context;

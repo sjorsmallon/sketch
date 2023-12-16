@@ -51,6 +51,9 @@ void set_uniform_value(int32_t location, int value)
     glUniform1i(location, value);
 }
 
+// After some deliberation: since this is all gl related, we just feed it a glm::* type. 
+// we can always convert it before sending it over.
+// if it turns out this is actually causing issues, we'll deal with it then
 template<>
 void set_uniform_value(int32_t location, glm::vec3 value) {
     glUniform3f(location, value.x, value.y, value.z);
@@ -68,16 +71,13 @@ void set_uniform_value(int32_t location, glm::mat4 value)
 template<typename T>
 void set_uniform(Shader_Program& shader_program, const std::string& uniform_name, T&& value) {
     int32_t location = get_uniform_location(shader_program.program_id, uniform_name);
-    
+
 
     if (location != -1) {
         set_uniform_value(location, std::forward<T>(value));
     }
 }
 
-// After some deliberation: since this is all gl related, we just feed it a glm::* type. 
-// we can always convert it before sending it over.
-// if it turns out this is actually causing issues, we'll deal with it then
 
 
 void list_all_attributes(GLuint program_id)

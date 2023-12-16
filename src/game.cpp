@@ -6,6 +6,10 @@
 #include <glad/glad.h> 
 #include <SDL/SDL_opengl.h>
 
+#include "imgui.h"
+#include "imgui_impl_sdl2.h"
+#include "imgui_impl_opengl3.h"
+
 // opengl shader stuff.
 #include "renderer/shader_program.hpp"
 
@@ -92,6 +96,22 @@ void init(Game& game)
         // Set debug output control parameters (optional)
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
 
+        // dear imgui
+        {
+            // Setup Dear ImGui context
+            IMGUI_CHECKVERSION();
+            ImGui::CreateContext();
+            ImGuiIO& io = ImGui::GetIO();
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+            io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+
+            // Setup Platform/Renderer backends
+            ImGui_ImplSDL2_InitForOpenGL(game.window, game.context);
+            ImGui_ImplOpenGL3_Init();
+        }
+
+
+
     }
 
     // from this point, we have a window and we can load shaders. and set some renderer state.
@@ -120,9 +140,6 @@ void init(Game& game)
 
 }
 
-
-
-
 void run(Game& game)
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // Example: Set clear color
@@ -131,6 +148,7 @@ void run(Game& game)
     while (game.is_running)
     {
         handle_input(game);    
+        render(game);
     }
     std::cerr << "end of run.\n";
 }
@@ -139,10 +157,15 @@ void run(Game& game)
 void deinit
 (Game& game)
 {
+
+    ImGui_ImplOpenGL3_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
     // Clean up and exit
     SDL_GL_DeleteContext(game.context);
     SDL_DestroyWindow(game.window);
     SDL_Quit();
+
 }
 
 
@@ -182,48 +205,66 @@ static void GLAPIENTRY opengl_debug_message_callback(
 static void handle_input(Game& game)
 {
     SDL_Event event;
-        while (SDL_PollEvent(&event))
+    while (SDL_PollEvent(&event))
+    {
+        std::cerr << "polling event." << '\n';
+        switch (event.type)
         {
-            std::cerr << "polling event." << '\n';
-            switch (event.type)
+            case SDL_KEYDOWN:
             {
-                case SDL_KEYDOWN:
-                {
-                    if (event.key.keysym.sym == SDLK_ESCAPE)
-                    {
-                        game.is_running = false;
-                    } else 
-                    {
-                        game.is_running = true;
-                    }
-
-                    break;
-
-                }
-             
-                case SDL_QUIT:
+                if (event.key.keysym.sym == SDLK_ESCAPE)
                 {
                     game.is_running = false;
-                    break;
+                } else 
+                {
+                    game.is_running = true;
                 }
 
-                default:
-                {
-                    break;
-                }
+                break;
+
+            }
+         
+            case SDL_QUIT:
+            {
+                game.is_running = false;
+                break;
             }
 
+            default:
+            {
+                break;
+            }
         }
+        ImGui_ImplSDL2_ProcessEvent(&event); // Forward your event to backend
+    }
 }
 
 
 static void render(Game& game) 
 {
-    // Clear the screen
-    glClear(GL_COLOR_BUFFER_BIT);
+    // start of render
+    {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        if (game.debug) 
+        {
+            ImGui_ImplOpenGL3_NewFrame();
+            ImGui_ImplSDL2_NewFrame();
+            ImGui::NewFrame();
+            ImGui::ShowDemoWindow(); // Show demo window! :)
+        }
+
+    }
 
     // Your rendering code goes here
 
-    // Swap buffers
-    SDL_GL_SwapWindow(game.window);
+    
+
+    // end of render
+    {
+         ImGui::Render();
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        // Swap buffers
+        SDL_GL_SwapWindow(game.window);
+    }
+    
 }
