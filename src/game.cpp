@@ -7,40 +7,22 @@
 #include <SDL/SDL_opengl.h>
 
 // opengl shader stuff.
-#include "renderer/shaders.hpp"
+#include "renderer/shader_program.hpp"
 
 // system includes.
 #include <iostream>
 
-#define 
-
-// openGL debug callback
-void GLAPIENTRY opengl_debug_message_callback(
+static void GLAPIENTRY opengl_debug_message_callback(
         GLenum source,
         GLenum type,
         GLuint id,
         GLenum severity,
         GLsizei length,
         const GLchar* message,
-        const void* userParam )
-    {
-        /// these warning IDs are ignored.
-        /// 0x8251: bound to video memory (intended.)
-        /// 0x8250: buffer performance warning: copying atomic buffer (which we want to do, since we need the values.)
-        std::set<GLenum> warning_types_to_ignore{0x8251, 0x8250};
+        const void* userParam );
 
-        const bool warning_can_be_ignored = (warning_types_to_ignore.find(type) != warning_types_to_ignore.end());
-
-        if (!warning_can_be_ignored) 
-        {
-            if (type == GL_DEBUG_TYPE_ERROR) std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
-            else
-            {
-                std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
-            }
-        }
-    }
-
+static void render(Game& game);
+static void handle_input(Game& game);
 
 void init(Game& game)
 {
@@ -112,8 +94,30 @@ void init(Game& game)
 
     }
 
-
     // from this point, we have a window and we can load shaders. and set some renderer state.
+
+
+    // step 1: load a shader!
+    uint32_t pbr_shader_program_id = temp_create_pbr_shader_program();
+
+
+   // Define the parameters for the projection matrix
+    float fov = 60.0f;             // Field of view (in degrees)
+    float aspect_ratio = 16.0f / 9.0f;  // Aspect ratio (width / height)
+    float near_plane = 0.1f;       // Near clipping plane
+    float far_plane = 100.0f;      // Far clipping plane
+
+    // Create the projection matrix using glm::perspective
+    glm::mat4 projection = glm::perspective(glm::radians(fov), aspect_ratio, near_plane, far_plane);
+
+    Shader_Program pbr_shader{
+        .program_id = pbr_shader_program_id
+    };
+
+    glUseProgram(pbr_shader.program_id);
+    set_uniform(pbr_shader, "projection", projection);
+
+
 }
 
 
@@ -122,43 +126,19 @@ void init(Game& game)
 void run(Game& game)
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f); // Example: Set clear color
-
+    
     // Main loop
-    while (game.is_running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event))
-        {
-            switch (event.type)
-            {
-                case SDL_KEYDOWN:
-                {
-                    if (event.key.keysym.sym == SDLK_ESCAPE)
-                    {
-                        game.is_running = false;
-                        break;
-                    }
-                }
-             
-                case SDL_QUIT:
-                {
-                    game.is_running = false;
-                    break;
-                }
-            }
-
-        }
-
-        // Clear the screen
-        glClear(GL_COLOR_BUFFER_BIT);
-
-        // Your rendering code goes here
-
-
-
-        // Swap buffers
-        SDL_GL_SwapWindow(game.window);
+    while (game.is_running)
+    {
+        handle_input(game);    
     }
+    std::cerr << "end of run.\n";
+}
 
+
+void deinit
+(Game& game)
+{
     // Clean up and exit
     SDL_GL_DeleteContext(game.context);
     SDL_DestroyWindow(game.window);
@@ -166,7 +146,84 @@ void run(Game& game)
 }
 
 
-void deinit(Game& game)
-{
+/////////////////////////////////////////////
+// file scope
+////////////////////////////////////////////
 
+
+// openGL debug callback
+static void GLAPIENTRY opengl_debug_message_callback(
+        GLenum source,
+        GLenum type,
+        GLuint id,
+        GLenum severity,
+        GLsizei length,
+        const GLchar* message,
+        const void* userParam )
+{
+    /// these warning IDs are ignored.
+    /// 0x8251: bound to video memory (intended.)
+    /// 0x8250: buffer performance warning: copying atomic buffer (which we want to do, since we need the values.)
+    std::set<GLenum> warning_types_to_ignore{0x8251, 0x8250};
+
+    const bool warning_can_be_ignored = (warning_types_to_ignore.find(type) != warning_types_to_ignore.end());
+
+    if (!warning_can_be_ignored) 
+    {
+        if (type == GL_DEBUG_TYPE_ERROR) std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
+        else
+        {
+            std::cerr <<  "[OpenGL]: type =  " << type << " severity = " << severity << ", message = " << message  << "\n";
+        }
+    }
+}
+
+
+static void handle_input(Game& game)
+{
+    SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            std::cerr << "polling event." << '\n';
+            switch (event.type)
+            {
+                case SDL_KEYDOWN:
+                {
+                    if (event.key.keysym.sym == SDLK_ESCAPE)
+                    {
+                        game.is_running = false;
+                    } else 
+                    {
+                        game.is_running = true;
+                    }
+
+                    break;
+
+                }
+             
+                case SDL_QUIT:
+                {
+                    game.is_running = false;
+                    break;
+                }
+
+                default:
+                {
+                    break;
+                }
+            }
+
+        }
+}
+
+
+static void render(Game& game) 
+{
+    // Clear the screen
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // Your rendering code goes here
+
+    // Swap buffers
+    SDL_GL_SwapWindow(game.window);
 }
