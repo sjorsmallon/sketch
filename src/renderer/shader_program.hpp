@@ -59,6 +59,10 @@ void set_uniform_value(int32_t location, glm::vec3 value) {
     glUniform3f(location, value.x, value.y, value.z);
 }
 
+template<>
+void set_uniform_value(int32_t location, glm::vec4 value) {
+    glUniform4f(location, value.x, value.y, value.z, value.w);
+}
 
 template<>
 void set_uniform_value(int32_t location, glm::mat4 value)

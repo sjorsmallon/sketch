@@ -2,7 +2,7 @@
 
 #include <fmt/core.h>
 #include <fmt/color.h>
-
+#include <glm/glm.hpp>
 
 namespace Log
 {
@@ -122,40 +122,43 @@ inline void Log::vlog(const char* format, fmt::format_args args)
 // custom formatters.
 // namespace fmt {
 
-// 	// glm::vec3
-//     template <>
-//     struct formatter<glm::vec3>
-//     {
-// 		template <typename ParseContext>
-// 		constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
-// 		template <typename FormatContext>
-// 		auto format(const glm::vec3 &lhs, FormatContext &ctx)
-// 		{
-// 			return format_to(ctx.out(), "({:.8f}, {:.8f} {:.8f})",
-// 		   		lhs.x, lhs.y, lhs.z);
-// 		}
-//     };
+namespace fmt {
 
-//     // glm::mat4
-//     template <>
-//     struct formatter<glm::mat4>
-//     {
-// 		template <typename ParseContext>
-// 		constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+	// glm::vec3
+    template <>
+    struct formatter<glm::vec3>
+    {
+		template <typename ParseContext>
+		constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
-// 		template <typename FormatContext>
-// 		auto format(const glm::mat4 &lhs, FormatContext &ctx)
-// 		{
-// 			return format_to(ctx.out(),
-// 			    "\n r0: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r1: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r2: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r3: |{:.3f} {:.3f} {:.3f} {:.3f}|\n",
-// 			    lhs[0][0], lhs[0][1], lhs[0][2], lhs[0][3],
-// 			    lhs[1][0], lhs[1][1], lhs[1][2], lhs[1][3],
-// 			    lhs[2][0], lhs[2][1], lhs[2][2], lhs[2][3],
-// 			    lhs[3][0], lhs[3][1], lhs[3][2], lhs[3][3]);
-//       	}
-// 	};
+		template <typename FormatContext>
+		auto format(const glm::vec3 &lhs, FormatContext &ctx)
+		{
+			return format_to(ctx.out(), "({:.8f}, {:.8f} {:.8f})",
+		   		lhs.x, lhs.y, lhs.z);
+		}
+    };
+    // glm::mat4
+template <>
+struct formatter<glm::mat4>
+{
+		template <typename ParseContext>
+		constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
+		template <typename FormatContext>
+		auto format(const glm::mat4 &lhs, FormatContext &ctx)
+		{
+			return format_to(ctx.out(),
+			    "\n r0: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r1: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r2: |{:.3f} {:.3f} {:.3f} {:.3f}|\n r3: |{:.3f} {:.3f} {:.3f} {:.3f}|\n",
+			    lhs[0][0], lhs[1][0], lhs[2][0], lhs[3][0],
+			    lhs[0][1], lhs[1][1], lhs[2][1], lhs[3][1],
+			    lhs[0][2], lhs[2][2], lhs[2][2], lhs[3][2],
+			    lhs[0][3], lhs[1][3], lhs[2][3], lhs[3][3]);
+  	}	
+};
+
+}
 
 // };
 
