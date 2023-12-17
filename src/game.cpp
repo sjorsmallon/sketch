@@ -22,6 +22,10 @@
 // system includes.
 #include <iostream>
 
+GLuint VAO, VBO;
+Shader_Program passthrough_shader_program{};
+
+
 static void GLAPIENTRY opengl_debug_message_callback(
         GLenum source,
         GLenum type,
@@ -30,7 +34,6 @@ static void GLAPIENTRY opengl_debug_message_callback(
         GLsizei length,
         const GLchar* message,
         const void* userParam );
-
 static void render(Game& game);
 static void handle_input(Game& game);
 
@@ -121,27 +124,54 @@ void init(Game& game)
     Log::log("hello {}!", "world");
     Log::warn("warning the {}", "world");
     Log::error("alex the {}???", "lion");
-    // from this point, we have a window and we can load shaders. and set some renderer state.
-    // step 1: load a shader!
-    uint32_t pbr_shader_program_id = temp_create_pbr_shader_program();
+
+    // openGL "setup"
+    {
 
 
-   // Define the parameters for the projection matrix
-    float fov = 60.0f;             // Field of view (in degrees)
-    float aspect_ratio = 16.0f / 9.0f;  // Aspect ratio (width / height)
-    float near_plane = 0.1f;       // Near clipping plane
-    float far_plane = 100.0f;      // Far clipping plane
+        uint32_t passthrough_shader_id = create_shader_program_from_files({
+            {"assets/shaders/passthrough/passthrough.vert", GL_VERTEX_SHADER},
+            {"assets/shaders/passthrough/passthrough.frag", GL_FRAGMENT_SHADER}}
+            );
 
-    // Create the projection matrix using glm::perspective
-    glm::mat4 projection = glm::perspective(glm::radians(fov), aspect_ratio, near_plane, far_plane);
-
-    Shader_Program pbr_shader{
-        .program_id = pbr_shader_program_id
-    };
+        passthrough_shader_program.program_id = passthrough_shader_id;
 
 
-    glUseProgram(pbr_shader.program_id);
-    set_uniform(pbr_shader, "projection", projection);
+
+        // Define the vertices of a triangle
+        float vertices[] = {
+            -0.5f, -0.5f, 0.0f, // Bottom-left
+             0.5f, -0.5f, 0.0f, // Bottom-right
+             0.0f,  0.5f, 0.0f  // Top-center
+        };
+
+        // Create a Vertex Array Object (VAO) and Vertex Buffer Object (VBO)
+       
+        glGenVertexArrays(1, &VAO);
+        glGenBuffers(1, &VBO);
+
+        // Bind VAO and VBO
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+        // Copy vertex data to VBO
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+        // Set vertex attribute pointers
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(0);
+
+        // Unbind VAO and VBO
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glBindVertexArray(0);
+
+
+
+
+
+
+    
+    }
 }
 
 void run(Game& game)
@@ -154,7 +184,6 @@ void run(Game& game)
         handle_input(game);    
         render(game);
     }
-    std::cerr << "end of run.\n";
 }
 
 
@@ -262,12 +291,15 @@ static void render(Game& game)
     }
 
     // Your rendering code goes here
+    // Use the shader program
+    glUseProgram(passthrough_shader_program.program_id);
+    glBindVertexArray(VAO);
+    glDrawArrays(GL_TRIANGLES, 0, 3);
 
-    
 
     // end of render
     {
-         ImGui::Render();
+        ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
         // Swap buffers
         SDL_GL_SwapWindow(game.window);

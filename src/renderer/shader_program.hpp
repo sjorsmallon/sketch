@@ -238,21 +238,19 @@ inline uint32_t create_shader_program(const uint32_t* shaders, int num_shaders) 
     return program_id;
 }
 
+// public API
 
-inline uint32_t temp_create_pbr_shader_program() 
+using Shader_Pair = std::pair<std::string, GLenum>;
+inline uint32_t create_shader_program_from_files(std::initializer_list<Shader_Pair> list)
 {
-        // Load vertex and fragment shaders
-    uint32_t vertex_shader   = load_shader_from_file("assets/shaders/pbr/pbr.vert", GL_VERTEX_SHADER);
-    uint32_t fragment_shader = load_shader_from_file("assets/shaders/pbr/pbr.frag", GL_FRAGMENT_SHADER);
 
-    if (vertex_shader == 0 || fragment_shader == 0) {
-        // Handle shader loading errors
-        // Exit or handle errors gracefully
+    auto shader_list = std::vector<uint32_t>();
+    for (auto& [path, shader_type]: list)
+    {
+        shader_list.push_back(load_shader_from_file(path, shader_type));
     }
 
-    // Create an OpenGL program and link shaders to it
-    uint32_t shaders[] = { vertex_shader, fragment_shader };
-    uint32_t shader_program = create_shader_program(shaders, 2);
+    uint32_t shader_program = create_shader_program(shader_list.data(), shader_list.size());
 
     if (shader_program == 0)
     {
@@ -267,8 +265,5 @@ inline uint32_t temp_create_pbr_shader_program()
         list_all_uniforms(shader_program);
     }
 
-
     return shader_program;
 }
-
-
