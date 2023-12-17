@@ -38,7 +38,7 @@ void init(Game& game)
 {
     game.window = nullptr;
     {
-        if (SDL_Init(SDL_INIT_EVERYTHING != OK))
+        if (SDL_Init(SDL_INIT_EVERYTHING) != OK)
         {
             std::cerr << "error initializing SDL.\n";
             return;
