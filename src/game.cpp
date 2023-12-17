@@ -6,10 +6,8 @@
 #include <glad/glad.h> 
 #include <SDL/SDL_opengl.h>
 
-// optional fmt access. not used in any of the "core" libraries, but used by log.
+// optional fmt access. not used in any of the "core" libraries, but used by game.
 #include "log/log.hpp"
-
-
 
 //imgui
 #include "imgui.h"
@@ -20,9 +18,14 @@
 #include <stdlib.h>
 #include "renderer/shader_program.hpp"
 
+
+// physics stuff.
+#include "systems/joltphysicssystem.hpp"
+
 // system includes.
 #include <iostream>
 #include <array>
+
 
 glm::vec3 default_camera_position{0.0,0.0, 10.0};
 glm::vec3 default_up{0.0,1.0,0.0};
@@ -56,8 +59,10 @@ static void GLAPIENTRY opengl_debug_message_callback(
         GLsizei length,
         const GLchar* message,
         const void* userParam );
-static void render(Game& game);
+
 static void handle_input(Game& game);
+static void update(Game& game);
+static void render(Game& game);
 
 static void create_triangle_buffers(uint32_t& VAO, uint32_t& VBO);
 static void create_cube_buffers(uint32_t&VAO, uint32_t&VBO, uint32_t& EBO);
@@ -71,13 +76,13 @@ void init(Game& game)
         // @NOTE(SMIA): this is _NECESSARY_ for capturing with renderdoc to work.
         if (SDL_Init(SDL_INIT_EVERYTHING) != OK)
         {
-            std::cerr << "error initializing SDL.\n";
+           Log::error("error initializing SDL.\n");
             return;
         }
 
         if (TTF_Init() != OK)
         {
-            std::cerr << "error initializing SDL TTF.\n";
+            Log::error("error initializing SDL TTF.\n");
             return; 
         }
 
@@ -175,13 +180,19 @@ void init(Game& game)
         );
 
         fixed_color_instanced_shader.program_id = fixed_color_instanced_shader_id;
+         create_triangle_buffers(triangle_VAO, triangle_VBO);
+        create_cube_buffers(cube_VAO, cube_VBO, cube_EBO);
+        create_instanced_cube_buffers(instanced_cube_VAO, instanced_cube_VBO, instanced_cube_EBO);
+        create_indexed_instanced_triangle_buffers(instanced_cube_no_index_buffer_VAO, instanced_cube_no_index_buffer_VBO);
     }
 
-    create_triangle_buffers(triangle_VAO, triangle_VBO);
-    create_cube_buffers(cube_VAO, cube_VBO, cube_EBO);
-    create_instanced_cube_buffers(instanced_cube_VAO, instanced_cube_VBO, instanced_cube_EBO);
-    create_indexed_instanced_triangle_buffers(instanced_cube_no_index_buffer_VAO, instanced_cube_no_index_buffer_VBO);
+    // set up systems
+    {
+        // game.registry.AddSystem<JoltPhysicsSystem>();
+    }
 }
+
+
 
 void run(Game& game)
 {
@@ -190,7 +201,8 @@ void run(Game& game)
     // Main loop
     while (game.is_running)
     {
-        handle_input(game);    
+        handle_input(game);
+        update(game);
         render(game);
     }
 }
@@ -283,6 +295,11 @@ static void handle_input(Game& game)
     }
 }
 
+static void update(Game& game) 
+{
+    // game.registry.GetSystem<JoltPhysicsSystem>().OnUpdate();
+}
+
 
 static void render(Game& game) 
 {
@@ -294,7 +311,7 @@ static void render(Game& game)
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         
-        game.debug = false;
+        game.debug = false; // this causes issues with renderdoc.
 
         if (game.debug) 
         {
@@ -350,108 +367,110 @@ static void render(Game& game)
     }
 
     // Your rendering code goes here
-    // Use the shader program
-    if (drawing_triangles)
     {
-        glUseProgram(passthrough_shader.program_id);
-        glBindVertexArray(triangle_VAO);
-        glDrawArrays(GL_TRIANGLES, 0, 3);
+        if (drawing_triangles)
+        {
+            glUseProgram(passthrough_shader.program_id);
+            glBindVertexArray(triangle_VAO);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+        }
+
+        if (drawing_cube)
+        {
+            glUseProgram(fixed_color_shader.program_id);
+
+            glm::mat4 model = glm::mat4(1.0f);
+            glm::vec3 camera_position = default_camera_position;
+            glm::vec3 camera_target = default_camera_target;
+            glm::vec3 camera_up = default_up;
+
+            // Create the view matrix
+            glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
+
+            float fov = glm::radians(60.0f); // Field of View in radians
+            float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
+            float nearPlane = 0.1f;  // Near clipping plane
+            float farPlane = 100.0f; // Far clipping plane
+
+            // Create the projection matrix
+            glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
+
+
+            set_uniform(fixed_color_shader, "model", model);
+            set_uniform(fixed_color_shader, "view", view);
+            set_uniform(fixed_color_shader, "projection", projection);
+            set_uniform(fixed_color_shader, "color", glm::vec4(1.0,0.0,0.0,1.0));
+
+            glUseProgram(fixed_color_shader.program_id);
+            glBindVertexArray(cube_VAO);
+            glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
+        }
+
+        if (drawing_instanced_cubes) 
+        {
+            glUseProgram(fixed_color_instanced_shader.program_id);
+
+            glm::vec3 camera_position = default_camera_position;
+            glm::vec3 camera_target = default_camera_target;
+            glm::vec3 camera_up = default_up;
+
+            // Create the view matrix
+            glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
+
+            float fov = glm::radians(60.0f); // Field of View in radians
+            float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
+            float nearPlane = 0.1f;  // Near clipping plane
+            float farPlane = 100.0f; // Far clipping plane
+
+            // Create the projection matrix
+            glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
+
+            set_uniform(fixed_color_instanced_shader, "view", view);
+            set_uniform(fixed_color_instanced_shader, "projection", projection);
+
+            glBindVertexArray(instanced_cube_VAO);
+            glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, 256);
+        }
+        
+        if (drawing_instanced_triangles)
+        {
+             glUseProgram(fixed_color_instanced_shader.program_id);
+
+            glm::vec3 camera_position = default_camera_position;
+            glm::vec3 camera_target = default_camera_target;
+            glm::vec3 camera_up = default_up;
+
+            // Create the view matrix
+            glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
+
+            float fov = glm::radians(60.0f); // Field of View in radians
+            float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
+            float nearPlane = 0.1f;  // Near clipping plane
+            float farPlane = 100.0f; // Far clipping plane
+
+            // Create the projection matrix
+            glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
+
+            set_uniform(fixed_color_instanced_shader, "view", view);
+            set_uniform(fixed_color_instanced_shader, "projection", projection);
+
+            glBindVertexArray(instanced_cube_no_index_buffer_VAO);
+            GLuint indices[] = {
+                0, 1, 2 // Define indices for a single triangle
+            };
+
+            glm::vec3 instanceOffsets[] = {
+                glm::vec3(0.0f, 0.0f, 0.0f),    // Offset for first instance
+                glm::vec3(2.0f, 5.0f, -15.0f),  // Offset for second instance
+                glm::vec3(-1.5f, -2.2f, -2.5f) // Offset for third instance
+            // ... Add more offsets for additional instances
+            };
+
+            int numInstances = sizeof(instanceOffsets) / sizeof(glm::vec3);
+            glDrawElementsInstanced(GL_TRIANGLES, sizeof(indices) / sizeof(GLuint), GL_UNSIGNED_INT, 0, 256);
+        }
     }
 
-    if (drawing_cube)
-    {
-        glUseProgram(fixed_color_shader.program_id);
-
-        glm::mat4 model = glm::mat4(1.0f);
-        glm::vec3 camera_position = default_camera_position;
-        glm::vec3 camera_target = default_camera_target;
-        glm::vec3 camera_up = default_up;
-
-        // Create the view matrix
-        glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
-
-        float fov = glm::radians(60.0f); // Field of View in radians
-        float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
-        float nearPlane = 0.1f;  // Near clipping plane
-        float farPlane = 100.0f; // Far clipping plane
-
-        // Create the projection matrix
-        glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
-
-
-        set_uniform(fixed_color_shader, "model", model);
-        set_uniform(fixed_color_shader, "view", view);
-        set_uniform(fixed_color_shader, "projection", projection);
-        set_uniform(fixed_color_shader, "color", glm::vec4(1.0,0.0,0.0,1.0));
-
-        glUseProgram(fixed_color_shader.program_id);
-        glBindVertexArray(cube_VAO);
-        glDrawElements(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0);
-    }
-
-    if (drawing_instanced_cubes) 
-    {
-        glUseProgram(fixed_color_instanced_shader.program_id);
-
-        glm::vec3 camera_position = default_camera_position;
-        glm::vec3 camera_target = default_camera_target;
-        glm::vec3 camera_up = default_up;
-
-        // Create the view matrix
-        glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
-
-        float fov = glm::radians(60.0f); // Field of View in radians
-        float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
-        float nearPlane = 0.1f;  // Near clipping plane
-        float farPlane = 100.0f; // Far clipping plane
-
-        // Create the projection matrix
-        glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
-
-        set_uniform(fixed_color_instanced_shader, "view", view);
-        set_uniform(fixed_color_instanced_shader, "projection", projection);
-
-        glBindVertexArray(instanced_cube_VAO);
-        glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, 256);
-    }
-    
-    if (drawing_instanced_triangles)
-    {
-         glUseProgram(fixed_color_instanced_shader.program_id);
-
-        glm::vec3 camera_position = default_camera_position;
-        glm::vec3 camera_target = default_camera_target;
-        glm::vec3 camera_up = default_up;
-
-        // Create the view matrix
-        glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
-
-        float fov = glm::radians(60.0f); // Field of View in radians
-        float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
-        float nearPlane = 0.1f;  // Near clipping plane
-        float farPlane = 100.0f; // Far clipping plane
-
-        // Create the projection matrix
-        glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
-
-        set_uniform(fixed_color_instanced_shader, "view", view);
-        set_uniform(fixed_color_instanced_shader, "projection", projection);
-
-        glBindVertexArray(instanced_cube_no_index_buffer_VAO);
-        GLuint indices[] = {
-            0, 1, 2 // Define indices for a single triangle
-        };
-
-        glm::vec3 instanceOffsets[] = {
-            glm::vec3(0.0f, 0.0f, 0.0f),    // Offset for first instance
-            glm::vec3(2.0f, 5.0f, -15.0f),  // Offset for second instance
-            glm::vec3(-1.5f, -2.2f, -2.5f) // Offset for third instance
-        // ... Add more offsets for additional instances
-        };
-
-        int numInstances = sizeof(instanceOffsets) / sizeof(glm::vec3);
-        glDrawElementsInstanced(GL_TRIANGLES, sizeof(indices) / sizeof(GLuint), GL_UNSIGNED_INT, 0, 256);
-    }
 
     // end of render
     {

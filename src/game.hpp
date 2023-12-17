@@ -22,6 +22,8 @@ struct Game {
 
 	SDL_Window* window;
   	SDL_GLContext context;
+
+  	
 };
 
 void init(Game& game);
