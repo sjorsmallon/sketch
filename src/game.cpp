@@ -188,7 +188,7 @@ void init(Game& game)
 
     // set up systems
     {
-        // game.registry.AddSystem<JoltPhysicsSystem>();
+        game.registry.AddSystem<JoltPhysicsSystem>();
     }
 }
 
@@ -297,7 +297,7 @@ static void handle_input(Game& game)
 
 static void update(Game& game) 
 {
-    // game.registry.GetSystem<JoltPhysicsSystem>().OnUpdate();
+    game.registry.GetSystem<JoltPhysicsSystem>().OnUpdate();
 }
 
 
