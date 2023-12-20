@@ -1,5 +1,5 @@
 #include "ecs.hpp"
-
+#include <cassert>
 
 int BaseComponent::nextId = 0;
 
@@ -40,7 +40,8 @@ void System::AddEntityToSystem(Entity entity) {
 }
 
 void System::RemoveEntityFromSystem(Entity entity) {
-	std::erase(entities, entity);
+	assert(false && "this is disabled for a jolt test. please re-enable me.");
+	// std::erase(entities, entity);
 }
 std::vector<Entity> System::GetSystemEntities() const
 {

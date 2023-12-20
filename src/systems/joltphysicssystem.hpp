@@ -18,6 +18,11 @@
 #include <Jolt/Physics/Body/BodyCreationSettings.h>
 #include <Jolt/Physics/Body/BodyActivationListener.h>
 
+#include <iostream>
+#include <cstdarg>
+#include <thread>
+
+
 JPH_SUPPRESS_WARNINGS
 
 // All Jolt symbols are in the JPH namespace
@@ -157,6 +162,8 @@ public:
 		}
 	}
 };
+
+
 
 
 class MyContactListener : public ContactListener
@@ -315,15 +322,25 @@ public:
 
 		// Create the settings for the body itself
 		// Note that here you can also set other properties like the restitution / friction.
-		BodyCreationSettings floor_settings(floor_shape, RVec3(0.0_r, -1.0_r, 0.0_r), Quat::sIdentity(), EMotionType::Static, Layers::NON_MOVING);
+		BodyCreationSettings floor_settings(floor_shape, RVec3(0.0f, -1.0f, 0.0f), Quat::sIdentity(), EMotionType::Static, Layers::NON_MOVING);
 		Body *floor = body_interface.CreateBody(floor_settings); // Note that if we run out of bodies this can return nullptr
 
 		// Add it to the world
 		body_interface.AddBody(floor->GetID(), EActivation::DontActivate);
 		// Now create a dynamic body to bounce on the floor
 		// Note that this uses the shorthand version of creating and adding a body to the world
-		BodyCreationSettings sphere_settings(new SphereShape(0.5f), RVec3(0.0_r, 2.0_r, 0.0_r), Quat::sIdentity(), EMotionType::Dynamic, Layers::MOVING);
-		sphere_id = body_interface.CreateAndAddBody(sphere_settings, EActivation::Activate);
+
+
+		// auto* sphere_shape = new SphereShape(0.5f);
+		// auto* other_shape = new BoxShape();
+		// BodyCreationSettings sphere_settings(
+		// 	sphere_shape, 
+		// 	RVec3(0.0_r, 2.0_r, 0.0_r),
+		// 	Quat::sIdentity(),
+		// 	EMotionType::Dynamic,
+		// 	Layers::MOVING);
+
+		// sphere_id = body_interface.CreateAndAddBody(sphere_settings, EActivation::Activate);
 
 		// Now you can interact with the dynamic body, in this case we're going to give it a velocity.
 		// (note that if we had used CreateBody then we could have set the velocity straight on the body before adding it to the physics system)
@@ -341,6 +358,7 @@ public:
 
 	void OnUpdate()
 	{
+		assert(false && "don't use this! some stuff is disabled because of compile issues.");
 		BodyInterface &body_interface = physics_system.GetBodyInterface();
 		// We simulate the physics world in discrete time steps. 60 Hz is a good rate to update the physics system.
 		const float cDeltaTime = 1.0f / 60.0f;

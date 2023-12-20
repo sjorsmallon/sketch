@@ -3,8 +3,6 @@
 #include <glad/glad.h> 
 #include <SDL/SDL_opengl.h>
 
-
-
 const int TARGET_FPS = 120;
 const int MILLISECONDS_PER_FRAME = 1000 / TARGET_FPS;
 #define OK 0
@@ -16,7 +14,7 @@ struct Game {
 	Registry registry;
 
 	int previous_frame_start_ms = 0;
-	bool frame_rate_capped = false;
+	bool fixed_framerate = true;
 	bool is_running = true;
 	bool debug = true;
 

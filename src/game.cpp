@@ -42,13 +42,24 @@ uint32_t instanced_cube_VAO;
 uint32_t instanced_cube_VBO;
 uint32_t instanced_cube_EBO;
 
-
 uint32_t instanced_cube_no_index_buffer_VAO;
 uint32_t instanced_cube_no_index_buffer_VBO;
+
+uint32_t compute_VAO;
+uint32_t compute_VBO;
+uint32_t compute_offset_VBO;
+
 
 Shader_Program passthrough_shader{};
 Shader_Program fixed_color_shader{};
 Shader_Program fixed_color_instanced_shader{};
+Shader_Program compute_shader{};
+Shader_Program fixed_color_instanced_vec4_shader{};
+
+constexpr int compute_stride_size_x = 128;
+constexpr int cube_count = 2048;
+static_assert(cube_count % compute_stride_size_x == 0);
+std::array<glm::vec4, cube_count> cube_positions;
 
 
 static void GLAPIENTRY opengl_debug_message_callback(
@@ -68,6 +79,7 @@ static void create_triangle_buffers(uint32_t& VAO, uint32_t& VBO);
 static void create_cube_buffers(uint32_t&VAO, uint32_t&VBO, uint32_t& EBO);
 static void create_instanced_cube_buffers(uint32_t&VAO, uint32_t&VBO, uint32_t& EBO);
 static void create_indexed_instanced_triangle_buffers(uint32_t&VAO, uint32_t& VBO);
+static void create_compute_buffers(uint32_t& VAO, uint32_t& VBO, uint32_t& offset_VBO);
 
 void init(Game& game)
 {
@@ -137,6 +149,8 @@ void init(Game& game)
         // Set debug output control parameters (optional)
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
 
+        glDisable(GL_CULL_FACE);
+
         // dear imgui
         {
             // Setup Dear ImGui context
@@ -178,17 +192,34 @@ void init(Game& game)
             {"assets/shaders/fixed_color_instanced/fixed_color_instanced.vert", GL_VERTEX_SHADER},
             {"assets/shaders/fixed_color_instanced/fixed_color_instanced.frag", GL_FRAGMENT_SHADER}}
         );
-
         fixed_color_instanced_shader.program_id = fixed_color_instanced_shader_id;
-         create_triangle_buffers(triangle_VAO, triangle_VBO);
+
+        uint32_t compute_shader_id = create_shader_program_from_files({
+            {"assets/shaders/compute_shader/compute_shader.comp", GL_COMPUTE_SHADER}
+        });
+        compute_shader.program_id = compute_shader_id;
+
+
+
+        uint32_t fixed_color_instanced_vec4_shader_id = create_shader_program_from_files({
+            {"assets/shaders/fixed_color_instanced_vec4/fixed_color_instanced_vec4.vert", GL_VERTEX_SHADER},
+            {"assets/shaders/fixed_color_instanced_vec4/fixed_color_instanced_vec4.frag", GL_FRAGMENT_SHADER}}
+        );
+        fixed_color_instanced_vec4_shader.program_id = fixed_color_instanced_vec4_shader_id;
+
+
+
+        create_triangle_buffers(triangle_VAO, triangle_VBO);
         create_cube_buffers(cube_VAO, cube_VBO, cube_EBO);
         create_instanced_cube_buffers(instanced_cube_VAO, instanced_cube_VBO, instanced_cube_EBO);
         create_indexed_instanced_triangle_buffers(instanced_cube_no_index_buffer_VAO, instanced_cube_no_index_buffer_VBO);
+        create_compute_buffers(compute_VAO, compute_VBO, compute_offset_VBO);
+
     }
 
     // set up systems
     {
-        game.registry.AddSystem<JoltPhysicsSystem>();
+        // game.registry.AddSystem<JoltPhysicsSystem>();
     }
 }
 
@@ -297,16 +328,31 @@ static void handle_input(Game& game)
 
 static void update(Game& game) 
 {
-    game.registry.GetSystem<JoltPhysicsSystem>().OnUpdate();
+    // game.registry.GetSystem<JoltPhysicsSystem>().OnUpdate();
+    //@NOTE(SJM): SDL_Delay solution (suspend thread?)
+    if (game.fixed_framerate)
+    {
+        int time_elapsed_since_last_frame_ms = (SDL_GetTicks() - game.previous_frame_start_ms);
+        int time_to_wait = MILLISECONDS_PER_FRAME - time_elapsed_since_last_frame_ms;
+        if (time_to_wait > 0 && time_to_wait <= MILLISECONDS_PER_FRAME)
+        {
+            SDL_Delay(time_to_wait);
+        }
+    }
+    
+    // store the start of "this" (the upcoming) frame.
+    float delta_time = (SDL_GetTicks() - game.previous_frame_start_ms) / 1000.0f;
+    game.previous_frame_start_ms = SDL_GetTicks();
 }
 
 
 static void render(Game& game) 
 {
-    static bool drawing_instanced_cubes = true;
+    static bool drawing_instanced_cubes = false;
     static bool drawing_cube = false;
     static bool drawing_triangles = false;
     static bool drawing_instanced_triangles = false;
+    static bool drawing_instanced_cubes_compute_shader = true;
     // start of render
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -324,12 +370,12 @@ static void render(Game& game)
             
             ImGui::Text("Select a shape to draw:");
             
-            static int value = 0;
+            static int value = 128;
             ImGui::RadioButton("Draw Triangle", &value, 0);
             ImGui::RadioButton("Draw Cube", &value, 1);
             ImGui::RadioButton("Draw Instanced Cubes", &value, 2);
-            ImGui::RadioButton("Draw Instanced Triangles", &value, 2);
-
+            ImGui::RadioButton("Draw Instanced Triangles", &value, 3);
+            ImGui::RadioButton("Draw Instanced Cubes with compute shader update", &value, 4);
 
 
             if (value == 0)
@@ -338,6 +384,7 @@ static void render(Game& game)
                 drawing_instanced_cubes = false;
                 drawing_cube = false;
                 drawing_instanced_triangles = false;
+                drawing_instanced_cubes_compute_shader = false;
             }
             if (value == 1) 
             {
@@ -345,6 +392,7 @@ static void render(Game& game)
                 drawing_instanced_cubes = false;
                 drawing_cube = true;
                 drawing_instanced_triangles = false;
+                drawing_instanced_cubes_compute_shader= false;
             }
             if (value == 2) 
             {
@@ -352,6 +400,7 @@ static void render(Game& game)
                 drawing_instanced_cubes = true;
                 drawing_cube = false;
                 drawing_instanced_triangles = false;
+                drawing_instanced_cubes_compute_shader= false;
             }
             if (value == 3)
             {
@@ -359,6 +408,16 @@ static void render(Game& game)
                 drawing_instanced_cubes = false;
                 drawing_cube = false;
                 drawing_instanced_triangles = true;
+                drawing_instanced_cubes_compute_shader= false;
+            }
+
+            if (value == 4)
+            {
+                drawing_triangles = false;
+                drawing_instanced_cubes = false;
+                drawing_cube = false;
+                drawing_instanced_triangles = false;
+                drawing_instanced_cubes_compute_shader= true;
             }
 
             ImGui::End();
@@ -429,9 +488,10 @@ static void render(Game& game)
             set_uniform(fixed_color_instanced_shader, "projection", projection);
 
             glBindVertexArray(instanced_cube_VAO);
-            glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, 256);
+            glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, cube_count);
         }
-        
+
+
         if (drawing_instanced_triangles)
         {
              glUseProgram(fixed_color_instanced_shader.program_id);
@@ -469,6 +529,48 @@ static void render(Game& game)
             int numInstances = sizeof(instanceOffsets) / sizeof(glm::vec3);
             glDrawElementsInstanced(GL_TRIANGLES, sizeof(indices) / sizeof(GLuint), GL_UNSIGNED_INT, 0, 256);
         }
+
+        if (drawing_instanced_cubes_compute_shader)
+        {
+            glUseProgram(compute_shader.program_id);
+            // set_uniform(compute_shader, "dt", static_cast<float>(game.previous_frame_start_ms));
+
+            // should I bind this vao? or a different one? since the VAO that we used to use 
+            //  has a different binding at spot 0? or what's going on?
+
+            glBindVertexArray(compute_VAO);
+            glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, compute_offset_VBO);
+            glDispatchCompute(cube_count / compute_stride_size_x, 1, 1);
+            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glUseProgram(0);
+
+
+            glBindVertexArray(compute_VAO);
+            glBindBuffer(GL_ARRAY_BUFFER, compute_VBO);
+
+            glUseProgram(fixed_color_instanced_vec4_shader.program_id);
+
+            glm::vec3 camera_position = default_camera_position;
+            glm::vec3 camera_target = default_camera_target;
+            glm::vec3 camera_up = default_up;
+
+            // Create the view matrix
+            glm::mat4 view = glm::lookAt(camera_position, camera_target, camera_up);
+
+            float fov = glm::radians(60.0f); // Field of View in radians
+            float aspectRatio = 1920.0f / 1080.0f; // Aspect ratio (Width / Height)
+            float nearPlane = 0.1f;  // Near clipping plane
+            float farPlane = 100.0f; // Far clipping plane
+
+            // Create the projection matrix
+            glm::mat4 projection = glm::perspective(fov, aspectRatio, nearPlane, farPlane);
+
+            set_uniform(fixed_color_instanced_vec4_shader, "view", view);
+            set_uniform(fixed_color_instanced_vec4_shader, "projection", projection);
+
+            glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, cube_count);
+        }
+
     }
 
 
@@ -611,7 +713,6 @@ static void create_instanced_cube_buffers(
 
 
     // fixed amount of cubes for now.
-    constexpr int cube_count = 256;
     std::array<glm::vec3, cube_count> cube_offsets;
     int buffer_size = cube_count * sizeof(glm::vec3);
 
@@ -622,8 +723,8 @@ static void create_instanced_cube_buffers(
       return min + ((float)rand() / RAND_MAX) * (max - min);
     };
 
-    float min_x = -5;
-    float max_x = 5;
+    float min_x = -10;
+    float max_x = 10;
     float min_y = -5;
     float max_y = 5;
     float min_z = -1;
@@ -752,4 +853,98 @@ static void create_indexed_instanced_triangle_buffers(uint32_t& VAO, uint32_t& V
 
     // ... (Rest of rendering loop remains unchanged)
 
+}
+
+
+static void create_compute_buffers(uint32_t& VAO, uint32_t& VBO, uint32_t& offset_VBO)
+{ 
+    float vertices[] = {
+        // Positions
+        -0.5f, -0.5f, -0.5f,
+         0.5f, -0.5f, -0.5f,
+         0.5f,  0.5f, -0.5f,
+        -0.5f,  0.5f, -0.5f,
+        -0.5f, -0.5f,  0.5f,
+         0.5f, -0.5f,  0.5f,
+         0.5f,  0.5f,  0.5f,
+        -0.5f,  0.5f,  0.5f
+    };
+
+    // Indices to render the cube
+    unsigned int indices[] = {
+        0, 1, 2, 2, 3, 0,
+        1, 5, 6, 6, 2, 1,
+        5, 4, 7, 7, 6, 5,
+        4, 0, 3, 3, 7, 4,
+        3, 2, 6, 6, 7, 3,
+        4, 5, 1, 1, 0, 4
+    };
+
+    // Create Vertex Array Object (VAO), Vertex Buffer Object (VBO), and Element Buffer Object (EBO)
+    uint EBO = 0;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    // Bind VAO, VBO, and EBO
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    // Copy index data to EBO
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    // Copy vertex data to VBO
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+
+    // Set vertex attribute pointers
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+    glEnableVertexAttribArray(0);
+
+
+    // fixed amount of cubes for now.
+    int buffer_size = cube_count * sizeof(glm::vec4);
+
+
+    glGenBuffers(1, &offset_VBO);
+
+    auto random_float = [](float min, float max) -> float {
+      return min + ((float)rand() / RAND_MAX) * (max - min);
+    };
+
+    float min_x = -10;
+    float max_x = 10;
+    float min_y = -5;
+    float max_y = 5;
+    float min_z = -1;
+    float max_z = -90;
+
+    for (size_t idx = 0 ; idx != cube_positions.size(); ++idx) 
+    {
+        glm::vec4& offset = cube_positions[idx];
+        float x = random_float(min_x, max_x);
+        float y = random_float(min_y, max_y);
+        float z = random_float(min_z, max_z);
+
+        offset = glm::vec4(x,y,z,0);
+    }
+    // glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, offset_VBO);
+    glBufferData(
+        GL_ARRAY_BUFFER,
+        buffer_size,
+        cube_positions.data(),
+        GL_DYNAMIC_DRAW
+    );
+
+   
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(GLfloat), (void*)0);
+    glVertexAttribDivisor(1, 1); // Set divisor to 1 (instanced rendering)
+
+    // Unbind buffers and VAO
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindVertexArray(0);
 }
