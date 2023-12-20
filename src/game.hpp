@@ -2,6 +2,7 @@
 #include <SDL/SDL.h>
 #include <glad/glad.h> 
 #include <SDL/SDL_opengl.h>
+#include <thread>
 
 const int TARGET_FPS = 120;
 const int MILLISECONDS_PER_FRAME = 1000 / TARGET_FPS;

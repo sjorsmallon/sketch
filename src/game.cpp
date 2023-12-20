@@ -9,6 +9,10 @@
 // optional fmt access. not used in any of the "core" libraries, but used by game.
 #include "log/log.hpp"
 
+
+#include "log/log_threaded.hpp"
+// test for async logging
+
 //imgui
 #include "imgui.h"
 #include "imgui_impl_sdl2.h"
@@ -25,6 +29,14 @@
 // system includes.
 #include <iostream>
 #include <array>
+#include <thread>
+#include <numeric> // for std::accumulate
+
+
+moodycamel::ConcurrentQueue<std::string> q;
+
+std::thread logger(logger_thread, std::ref(q));
+
 
 
 glm::vec3 default_camera_position{0.0,0.0, 10.0};
@@ -49,6 +61,9 @@ uint32_t compute_VAO;
 uint32_t compute_VBO;
 uint32_t compute_offset_VBO;
 
+uint32_t query_start;
+uint32_t query_end;
+
 
 Shader_Program passthrough_shader{};
 Shader_Program fixed_color_shader{};
@@ -56,8 +71,8 @@ Shader_Program fixed_color_instanced_shader{};
 Shader_Program compute_shader{};
 Shader_Program fixed_color_instanced_vec4_shader{};
 
-constexpr int compute_stride_size_x = 128;
-constexpr int cube_count = 2048;
+constexpr int compute_stride_size_x = 256;
+constexpr int cube_count = 32768 * 2;
 static_assert(cube_count % compute_stride_size_x == 0);
 std::array<glm::vec4, cube_count> cube_positions;
 
@@ -83,6 +98,8 @@ static void create_compute_buffers(uint32_t& VAO, uint32_t& VBO, uint32_t& offse
 
 void init(Game& game)
 {
+
+
     game.window = nullptr;
     {
         // @NOTE(SMIA): this is _NECESSARY_ for capturing with renderdoc to work.
@@ -148,8 +165,12 @@ void init(Game& game)
 
         // Set debug output control parameters (optional)
         glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
-
         glDisable(GL_CULL_FACE);
+
+        // generate queries to use for e.g. timing information.
+        glGenQueries(1, &query_start);
+        glGenQueries(1, &query_end);
+
 
         // dear imgui
         {
@@ -532,17 +553,54 @@ static void render(Game& game)
 
         if (drawing_instanced_cubes_compute_shader)
         {
+            const int sample_count = 2048;
+            static std::array<double, sample_count> samples;
+            static int idx = 0;
+
             glUseProgram(compute_shader.program_id);
             // set_uniform(compute_shader, "dt", static_cast<float>(game.previous_frame_start_ms));
 
             // should I bind this vao? or a different one? since the VAO that we used to use 
             //  has a different binding at spot 0? or what's going on?
+            // It turns out that binding this VAO is "good enough"? or is it actually wrong and it works by accident?
 
+            glQueryCounter(query_start, GL_TIMESTAMP);
             glBindVertexArray(compute_VAO);
             glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, compute_offset_VBO);
             glDispatchCompute(cube_count / compute_stride_size_x, 1, 1);
-            glMemoryBarrier(GL_ALL_BARRIER_BITS);
+            glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT);
+
+            // End query
+            glQueryCounter(query_end, GL_TIMESTAMP);
+
+            // Retrieve results
+            GLuint64 start_time, end_time;
+            glGetQueryObjectui64v(query_start, GL_QUERY_RESULT, &start_time);
+            glGetQueryObjectui64v(query_end, GL_QUERY_RESULT, &end_time);
+
+            GLuint64 time_elapsed = end_time - start_time;
+            double time_elapsed_ms = static_cast<double>(time_elapsed) / 1e6;
+            // use async logging
+            log(q,"Compute shader time (ms) : {}", time_elapsed_ms);
+            samples[idx] = time_elapsed_ms;
+            idx += 1;
+            if (idx == sample_count)
+            {
+                // Using std::accumulate to sum all elements in the std::array
+                double sum = std::accumulate(samples.begin(), samples.end(), 0.0);
+
+                // Calculate the average by dividing the sum by the number of elements
+                log(q, "average compute shader time (ms): {}", static_cast<double>(sum) / samples.size());
+
+                std::cerr << "average compute shader time (ms): " << static_cast<double>(sum) / samples.size() << '\n';
+
+                // ah, we exited before being done logging. whoops.
+                exit(0);
+            }
+
             glUseProgram(0);
+
+
 
 
             glBindVertexArray(compute_VAO);
@@ -568,7 +626,24 @@ static void render(Game& game)
             set_uniform(fixed_color_instanced_vec4_shader, "view", view);
             set_uniform(fixed_color_instanced_vec4_shader, "projection", projection);
 
+
+    
+            glQueryCounter(query_start, GL_TIMESTAMP);
             glDrawElementsInstanced(GL_TRIANGLES, 36, GL_UNSIGNED_INT, 0, cube_count);
+            glQueryCounter(query_end, GL_TIMESTAMP);
+
+            // Retrieve results
+            {
+                GLuint64 start_time, end_time;
+                glGetQueryObjectui64v(query_start, GL_QUERY_RESULT, &start_time);
+                glGetQueryObjectui64v(query_end, GL_QUERY_RESULT, &end_time);
+
+                GLuint64 time_elapsed = end_time - start_time;
+                double time_elapsed_ms = static_cast<double>(time_elapsed) / 1e6;
+                // use async logging
+                log(q,"drawing time (ms) : {}", time_elapsed_ms);    
+            }
+            
         }
 
     }
